@@ -10,6 +10,12 @@ defmodule Algae.Internal do
   def data_ast(lines, %{aliases: _} = caller) when is_list(lines) do
     {field_values, field_types, specs, args, defaults} = module_elements(lines, caller)
 
+    list = Enum.map(0..Enum.count(args), &({:new, &1}))
+      # More verbose, but clearer.
+      # for arity <- 0..Enum.count(args) do
+      #   {:new, arity}
+      # end
+
     quote do
       @type t :: %__MODULE__{unquote_splicing(field_types)}
       defstruct unquote(field_values)
@@ -20,7 +26,7 @@ defmodule Algae.Internal do
         struct(__MODULE__, unquote(defaults))
       end
 
-      defoverridable [new: unquote(Enum.count(args))]
+      defoverridable unquote(list)
     end
   end
 
