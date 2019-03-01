@@ -10,6 +10,24 @@ defmodule Algae.Internal do
   def data_ast(lines, %{aliases: _} = caller) when is_list(lines) do
     {field_values, field_types, specs, args, defaults} = module_elements(lines, caller)
 
+    quote do
+      @type t :: %__MODULE__{unquote_splicing(field_types)}
+      defstruct unquote(field_values)
+
+      @doc "Positional constructor, with args in the same order as they were defined in"
+      @spec new(unquote_splicing(specs)) :: t()
+      def new(unquote_splicing(args)) do
+        struct(__MODULE__, unquote(defaults))
+      end
+
+      defoverridable [new: unquote(Enum.count(args))]
+    end
+  end
+
+  # x as in experimental. (No clue why I haven't done this in previous commits...)
+  def data_astx(lines, %{aliases: _} = caller) when is_list(lines) do
+    {field_values, field_types, specs, args, defaults} = module_elements(lines, caller)
+
     IO.puts("\n\n")
     IO.inspect(field_types)
     IO.puts("\n\n")
