@@ -10,6 +10,9 @@ defmodule Algae.Internal do
   def data_ast(lines, %{aliases: _} = caller) when is_list(lines) do
     {field_values, field_types, specs, args, defaults} = module_elements(lines, caller)
 
+    IO.puts("\n\n")
+    IO.inspect(field_types)
+    IO.puts("\n\n")
     list = Enum.map(0..Enum.count(args), &({:new, &1}))
       # More verbose, but clearer.
       # for arity <- 0..Enum.count(args) do
@@ -19,43 +22,33 @@ defmodule Algae.Internal do
     args_without_defaults =
       Enum.map(args, fn({:\\, [], [stripped, _]}) -> stripped end)
 
+    types =
+      Enum.map(
+        field_types,
+        fn
+          ({_field_name, {type, _, _}}) when is_atom(type) ->
+            type
+          ({field_name, _} = field) ->
+            IO.puts("\n\n")
+            IO.inspect(field)
+            IO.puts("\n\n")
+            field_name
+        end
+      )
+    # import IEx; pry()
+
     quote do
       use Quark
       @type t :: %__MODULE__{unquote_splicing(field_types)}
       defstruct unquote(field_values)
 
       @doc "Positional constructor, with args in the same order as they were defined in"
-      # First attempt (2019-02-28_1229) -> see commit c614bb3
-
-      # Second attempt (2019-02-28_1547)
-      # --------------
-      # Works, but default values needed to be removed. This
-      # won't be a  problem in my opinion  if dialyzer types
-      # would be replaced with some Witchcraft defined ones.
-      # Such as the primitives in PureScript `Prim`.
-      #
-      # ```elixir
-      # defmodule Int do
-      #   import Algae
-      #
-      #   defdata do
-      #     int :: integer()
-      #   end
-      #
-      #   # def new() do
-      #   #   super()
-      #   #   raise(UndefinedFunctionError, "Int.new/0 is undefined or private")
-      #   # end
-      #
-      #   def new(int) when is_integer(int) do
-      #     super(int)
-      #   end
-      #
-      #   def new(_), do: raise(ArgumentError, "not int")
-      # end
-      # ```
 
       defpartialx new(unquote_splicing(args_without_defaults)) do
+        for {type, arg} <- Enum.zip(unquote(types), unquote(args_without_defaults)) do
+          # can't put Prim.integer, etc., for now because something `module_elements` parser doesn't like it
+          apply(Algae.Prim, type, [arg])
+        end
         struct(__MODULE__, unquote(defaults))
       end
 
@@ -67,6 +60,7 @@ defmodule Algae.Internal do
       # end
 
       defoverridable unquote(list)
+
     end
   end
 
@@ -179,6 +173,7 @@ defmodule Algae.Internal do
     List.foldr(lines, {[], [], [], [], []},
       fn(line, {value_acc, type_acc, typespec_acc, acc_arg, acc_mapping}) ->
         {field, type, default_value} = normalize_elements(line, caller)
+        # import IEx; pry
         arg = {field, [], Elixir}
 
         {

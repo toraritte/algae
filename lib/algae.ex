@@ -4,6 +4,7 @@ defmodule Algae do
   """
 
   import Algae.Internal
+  import Algae.Prim
 
   @type ast() :: {atom(), any(), any()}
 
