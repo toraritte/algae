@@ -25,14 +25,14 @@ defmodule Algae.Internal do
       defstruct unquote(field_values)
 
       @doc "Positional constructor, with args in the same order as they were defined in"
-      # First attempt (2019-02-28_1229)
-      # -------------
-      # Works, but  not the  way I  expected and  only after
-      # stripping  `args` of  defaults  because  of the  way
-      # `defpartial` is implemented (see below), but it will
-      # let override functions, which is sweet.
-      #
-      # The test run:
+      # First attempt (2019-02-28_1229) -> see commit c614bb3
+
+      # Second attempt (2019-02-28_1547)
+      # --------------
+      # Works, but default values needed to be removed. This
+      # won't be a  problem in my opinion  if dialyzer types
+      # would be replaced with some Witchcraft defined ones.
+      # Such as the primitives in PureScript `Prim`.
       #
       # ```elixir
       # defmodule Int do
@@ -42,6 +42,11 @@ defmodule Algae.Internal do
       #     int :: integer()
       #   end
       #
+      #   # def new() do
+      #   #   super()
+      #   #   raise(UndefinedFunctionError, "Int.new/0 is undefined or private")
+      #   # end
+      #
       #   def new(int) when is_integer(int) do
       #     super(int)
       #   end
@@ -49,71 +54,8 @@ defmodule Algae.Internal do
       #   def new(_), do: raise(ArgumentError, "not int")
       # end
       # ```
-      #
-      # ```text
-      # iex(13)> Int.new
-      # #Function<1.46357966/1 in Int.new/0>
-      # iex(14)> i = Int.new
-      # #Function<1.46357966/1 in Int.new/0>
-      # iex(15)> i.(27)
-      # %Int{int: 27}
-      #
-      # # works, because i is the curried anon fun, instead of the overridden one
-      # iex(16)> i.(:a)
-      # %Int{int: :a}
-      # iex(17)> Int.new
-      # new/0    new/1
-      # iex(17)> Int.new
-      # new/0    new/1
-      # iex(17)> Int.new :a
-      # ```
-      #
-      # The problem with `defpartial`:
-      #
-      # 1. The `defpartial` macro  calls `defcurry` first, that
-      #    defines  a function  with zero  arity, which  retuns
-      #    an anonymous function.
-      #
-      # 2. `defpartial`  defines  all  the  remaining  function
-      #    clauses  up to  the specified  arity by  calling the
-      #    predefined zero  arity function with  various number
-      #    of arguments.  (And anon  funs don't  accept default
-      #    values, hence `args_without_defaults`.)
-      #
-      # What I would need is something like this:
-      #
-      # ```elixir
-      # defmodule A do
-      #   defmacro __using__(_) do
-      #     quote do
-      #       def new(), do: fn(a) -> apply(__MODULE__, :new, [a]) end
-      #       def new(a), do: fn(b) -> apply(__MODULE__, :new, [a, b]) end
-      #       def new(a, b), do: a - b
 
-      #       defoverridable new: 0, new: 1, new: 2
-      #     end
-      #   end
-      # end
-      #
-      # defmodule B do
-      #   use A
-      #   def new(a) when is_integer(a), do: super(a)
-      #   def new(_), do: raise(ArgumentError, "not integer")
-      # end
-      # ```
-      # ```text
-      # iex(23)> B.new.(10).(5)
-      # 5
-      # iex(24)> B.new.(:a)
-      # ** (ArgumentError) not int
-      #     iex:25: B.new/1
-      # iex(24)> f = B.new.(27)
-      # #Function<1.130550902/1 in B."new (overridable 1)"/1>
-      # iex(25)> f.(18)
-      # 9
-      # ```
-
-      defpartial new(unquote_splicing(args_without_defaults)) do
+      defpartialx new(unquote_splicing(args_without_defaults)) do
         struct(__MODULE__, unquote(defaults))
       end
 

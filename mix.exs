@@ -29,7 +29,12 @@ defmodule Algae.Mixfile do
 
        {:inch_ex,  "~> 0.5",  only: [:dev, :docs, :test]},
 
-       {:quark,      "~> 2.3"},
+       # {:quark,      "~> 2.3"},
+      {:quark,
+        github:   "toraritte/quark",
+        branch:   "experiments",
+        override: true,
+      },
        {:type_class, "~> 1.2"},
        {:witchcraft, "~> 1.0"}
      ],
