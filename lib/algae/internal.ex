@@ -39,6 +39,10 @@ defmodule Algae.Internal do
 
     args_without_defaults =
       Enum.map(args, fn({:\\, [], [stripped, _]}) -> stripped end)
+    IO.inspect(args_without_defaults)
+
+    scanned_args_without_defaults =
+      Enum.scan(args_without_defaults, [], &(&2 ++ [&1]))
 
     types =
       Enum.map(
@@ -53,6 +57,8 @@ defmodule Algae.Internal do
             field_name
         end
       )
+    scanned_types =
+      Enum.scan(types, [], &(&2 ++ [&1]))
     # import IEx; pry()
 
     quote do
@@ -63,10 +69,7 @@ defmodule Algae.Internal do
       @doc "Positional constructor, with args in the same order as they were defined in"
 
       defpartialx new(unquote_splicing(args_without_defaults)) do
-        for {type, arg} <- Enum.zip(unquote(types), unquote(args_without_defaults)) do
-          # can't put Prim.integer, etc., for now because something `module_elements` parser doesn't like it
-          apply(Algae.Prim, type, [arg])
-        end
+        IO.inspect(unquote(args_without_defaults))
         struct(__MODULE__, unquote(defaults))
       end
 
@@ -79,6 +82,37 @@ defmodule Algae.Internal do
 
       defoverridable unquote(list)
 
+      # override `new/*` data constructors with typechecked ones
+      unquote do
+        [scanned_args_without_defaults, scanned_types]
+        |> Enum.zip()
+        |> Enum.map(&override_new/1)
+      end
+      # override_data_constructors(scanned_args_without_defaults, scanned_types)
+
+    end
+  end
+
+  # length(types) == length(args) or something is messed up during client-side declaration
+  defp override_new({args, types}) do
+    quote do
+      # def unquote({:new, [], args}) do
+      def new(unquote_splicing(args)) do
+        unquote do: do_typecheck(types, args)
+        # for {type, arg} <- Enum.zip(unquote(types), unquote(args)) do
+        #   apply(Algae.Prim, type, [arg])
+        # end
+        super(unquote_splicing(args))
+      end
+    end
+  end
+
+  defp do_typecheck(type_functions, functions_args) do
+    quote do
+      for {type, arg} <- Enum.zip(unquote(type_functions), unquote(functions_args)) do
+        # can't put Prim.integer, etc., for now because something `module_elements` parser doesn't like it
+        apply(Algae.Prim, type, [arg])
+      end
     end
   end
 
