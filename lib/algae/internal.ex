@@ -28,10 +28,15 @@ defmodule Algae.Internal do
   def data_astx(lines, %{aliases: _} = caller) when is_list(lines) do
     {field_values, field_types, specs, args, defaults} = module_elements(lines, caller)
 
-    IO.puts("\n\n")
+    IO.puts("data_astx's field_types:")
     IO.inspect(field_types)
-    IO.puts("\n\n")
-    list = Enum.map(0..Enum.count(args), &({:new, &1}))
+    IO.puts("---")
+
+    IO.puts("data_astx's defaults:")
+    IO.inspect(defaults)
+    IO.puts("---")
+
+    override_list = Enum.map(0..Enum.count(args), &({:new, &1}))
       # More verbose, but clearer.
       # for arity <- 0..Enum.count(args) do
       #   {:new, arity}
@@ -39,22 +44,27 @@ defmodule Algae.Internal do
 
     args_without_defaults =
       Enum.map(args, fn({:\\, [], [stripped, _]}) -> stripped end)
+    IO.puts("args_without_defaults:")
     IO.inspect(args_without_defaults)
+    IO.puts("---")
 
     scanned_args_without_defaults =
       Enum.scan(args_without_defaults, [], &(&2 ++ [&1]))
 
-    types =
-      Enum.map(
+    {fields, types} =
+      List.foldr(
         field_types,
+        {[],[]},
         fn
-          ({_field_name, {type, _, _}}) when is_atom(type) ->
-            type
-          ({field_name, _} = field) ->
-            IO.puts("\n\n")
-            IO.inspect(field)
-            IO.puts("\n\n")
-            field_name
+          ({field, {type, _ctx, nil}}, {fs, ts}) when is_atom(type) ->
+            {[field|fs],[{:prim, type}|ts]}
+          ({field, {:__aliases__, _ctx, [_module]} = type}, {fs, ts}) ->
+            {[field|ts],[{:algae, type}|ts]}
+          # ({field_name, _} = field) ->
+          #   IO.puts("types' field:")
+          #   IO.inspect(field)
+          #   IO.puts("---")
+          #   field_name
         end
       )
     scanned_types =
@@ -69,18 +79,31 @@ defmodule Algae.Internal do
       @doc "Positional constructor, with args in the same order as they were defined in"
 
       defpartialx new(unquote_splicing(args_without_defaults)) do
+        IO.puts("unquoted args_without_defaults:")
         IO.inspect(unquote(args_without_defaults))
+        IO.puts("---")
         struct(__MODULE__, unquote(defaults))
       end
 
-      # Original
-      # --------
-      # @spec new(unquote_splicing(specs)) :: t()
-      # def new(unquote_splicing(args)) do
-      #   struct(__MODULE__, unquote(defaults))
-      # end
+      def type(%module{} = data) do
+        IO.puts("type's data:")
+        IO.inspect(data)
+        IO.puts("---")
 
-      defoverridable unquote(list)
+        args =
+          Enum.map(
+            unquote(fields),
+            &Map.get(data,&1)
+          )
+
+        IO.puts("type/1 args:")
+        IO.inspect(args)
+        IO.puts("---")
+
+        apply(module, :new, args)
+      end
+
+      defoverridable unquote(override_list) ++ [type: 1]
 
       # override `new/*` data constructors with typechecked ones
       unquote do
@@ -99,19 +122,29 @@ defmodule Algae.Internal do
       # def unquote({:new, [], args}) do
       def new(unquote_splicing(args)) do
         unquote do: do_typecheck(types, args)
-        # for {type, arg} <- Enum.zip(unquote(types), unquote(args)) do
-        #   apply(Algae.Prim, type, [arg])
-        # end
         super(unquote_splicing(args))
       end
     end
   end
 
   defp do_typecheck(type_functions, functions_args) do
+    IO.puts("do_typecheck before quote:")
+    IO.inspect(type_functions)
+    IO.puts("---")
     quote do
+      IO.puts("do_typecheck after quote:")
+      IO.inspect(unquote(type_functions))
+      IO.puts("---")
       for {type, arg} <- Enum.zip(unquote(type_functions), unquote(functions_args)) do
         # can't put Prim.integer, etc., for now because something `module_elements` parser doesn't like it
-        apply(Algae.Prim, type, [arg])
+        # apply(Algae.Prim, type, [arg])
+        # Algae.Typechecker.check(type, arg)
+        case type do
+          {:prim, type} ->
+            apply(Algae.Prim, type, [arg])
+          {:algae, module} ->
+            module.type(arg)
+        end
       end
     end
   end
