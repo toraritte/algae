@@ -226,8 +226,8 @@ defmodule Algae do
       [do: {:__block__, _, lines}] ->
         data_astx(lines, __CALLER__)
 
-      # [do: line] ->
-      #   data_ast([line], __CALLER__)
+      [do: line] ->
+        data_astx([line], __CALLER__)
     end
   end
 
