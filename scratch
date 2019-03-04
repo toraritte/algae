@@ -1,0 +1,116 @@
+defmodule Int do
+  import Algae
+
+  defdata do
+    int :: integer()
+  end
+
+  # def new() do
+  #   super()
+  #   raise(UndefinedFunctionError, "Int.new/0 is undefined or private")
+  # end
+
+  def new(int) when is_integer(int) do
+    super(int)
+  end
+
+  def new(_), do: raise(ArgumentError, "not int")
+end
+
+defmodule Person do
+  import Algae
+  # defdatax do
+  # defdatax overrides: ["new/1": fn(name) -> IO.puts("WORKS: #{name}") end] do
+  defdatax overrides: ["new/1": fn(_) -> raise(UndefinedFunctionError, "locked") end] do
+  # defdatax overrides: ["new/2": fn(name, age) -> IO.puts("WORKS: #{name} #{age}") end] do
+  # defdatax overrides: ["new/1": fn(name) -> IO.puts("WORKS: #{name}") end, "new/2": fn(a,b) -> IO.puts("WORKS #{a} #{b}") end] do
+    name :: string
+    age  :: integer
+  end
+end
+Person.new
+Person.new("lofa")
+Person.new("lofa", 27)
+Person.new("lofa").(27)
+Person.new.("lofa").(27)
+[
+  overrides: [
+    "new/1": {:fn, [line: 3],
+     [
+       {:->, [line: 3],
+        [
+          [{:name, [line: 3], nil}],
+          {{:., [line: 3], [{:__aliases__, [line: 3], [:IO]}, :inspect]},
+           [line: 3], [{:name, [line: 3], nil}]}
+        ]}
+     ]}
+  ]
+]
+[
+  do: {:__block__, [],
+   [
+     {:::, [line: 4], [{:name, [line: 4], nil}, {:string, [line: 4], nil}]},
+     {:::, [line: 5], [{:age, [line: 5], nil}, {:integer, [line: 5], nil}]}
+   ]}
+]
+  # def new(str) do
+  #   apply(Algae.Prim, :string, [str])
+  #   super(str)
+  # end
+
+  # def new(str, int) do
+  #   apply(Algae.Prim, :string, [str])
+  #   apply(Algae.Prim, :integer, [int])
+  #   super(str, int)
+  # end
+
+defmodule Employee do
+  import Algae
+  defdatax do
+    person :: Person
+    role :: string
+  end
+end
+
+def mod(num, denom) do
+  inter = rem(num, denom)
+  if inter < 0 do denom + inter else denom end 
+end
+
+defdata Clock do
+  hour: mod(integer, 24)
+  minute: mod(integer, 60)
+end
+
+five_minutes = %Clock{hour: -1, minute: 55}
+# => %Clock{hour: 23, minute: 55}
+
+%five_minutes{minute: 102}
+# => Clock[hour: 23, minute: 42]
+
+defmodule Clock do
+  import Algae
+
+  def mod(num, denom) do
+    inter = rem(num, denom)
+    if inter < 0 do denom + inter else denom end 
+  end
+
+  defmodule Hour do
+    import Algae
+    defdatax do
+      hour :: integer
+    end
+    def mod(num, denom) do
+      inter = rem(num, denom)
+      if inter < 0 do denom + inter else denom end 
+    end
+    def new(hour) do
+      hour
+      |> mod(24)
+      |> super()
+    end
+  end
+  defmodule Minute do
+  end
+end
