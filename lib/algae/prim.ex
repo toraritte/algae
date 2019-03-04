@@ -7,4 +7,8 @@ defmodule Algae.Prim do
 
   def boolean(bool) when is_boolean(bool), do: bool
   def boolean(_), do: raise(ArgumentError, "not boolean")
+
+  def float(float) when is_float(float), do: float
+  def float(_), do: raise(ArgumentError, "not float")
 end
+

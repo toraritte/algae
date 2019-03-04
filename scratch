@@ -189,3 +189,41 @@ defmodule Clock do
   end
 end
 
+pry(2)> lines
+[
+  {:::, [line: 5], [{:hour, [line: 5], nil}, {:__aliases__, [line: 5], [:Hour]}]},
+  {:::, [line: 6], [{:minute, [line: 6], nil}, {:__aliases__, [line: 6], [:Minute]}]}
+
+pry(1)> lines
+[
+  {:::, [line: 7], [{:hour, [line: 7], nil}, {:__aliases__, [line: 7], [:Clock, :Hour]}]},
+  {:::, [line: 8], [{:minute, [line: 8], nil}, {:__aliases__, [line: 8], [:Clock, :Minute]}]}
+]
+
+# =============================
+
+defdata AcuteTriangle, validate: acute do
+  angle1: float
+  angle2: float
+end
+
+defp acute(%AcuteTriangle{angle1: angle1, angle2: angle2}) do: abs(angle1 - angle2) < 90.0
+
+# ---
+
+defmodule AcuteTriangle do
+  import Algae
+  defdatax do
+    angle1 :: float
+    angle2 :: float
+  end
+
+  # def new(alfa, beta) do
+  #   case abs(alfa - beta) < 90.0 do
+  #     false ->
+  #       raise(ArgumentError, "angles are not acute")
+  #     true ->
+  #       super(alfa, beta)
+  #   end
+  # end
+end
