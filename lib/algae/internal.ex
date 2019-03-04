@@ -36,13 +36,14 @@ defmodule Algae.Internal do
     IO.inspect(defaults)
     IO.puts("---")
 
-    override_list = Enum.map(0..Enum.count(args), &({:new, &1}))
+    new_override_list = Enum.map(0..Enum.count(args), &({:new, &1}))
+    newp_override_list = Enum.map(0..Enum.count(args), &({:newp, &1}))
       # More verbose, but clearer.
       # for arity <- 0..Enum.count(args) do
       #   {:new, arity}
       # end
-    IO.puts("data_astx's override_list:")
-    IO.inspect(override_list)
+    IO.puts("data_astx's newp_override_list:")
+    IO.inspect(newp_override_list)
     IO.puts("---")
 
     args_without_defaults =
@@ -81,11 +82,15 @@ defmodule Algae.Internal do
 
       @doc "Positional constructor, with args in the same order as they were defined in"
 
-      defpartialx new(unquote_splicing(args_without_defaults)) do
+      defpartialx newp(unquote_splicing(args_without_defaults)) do
         IO.puts("unquoted args_without_defaults:")
         IO.inspect(unquote(args_without_defaults))
         IO.puts("---")
         struct(__MODULE__, unquote(defaults))
+      end
+
+      defpartialx new(unquote_splicing(args_without_defaults)) do
+        newp(unquote_splicing(args_without_defaults))
       end
 
       def type(%module{} = data) do
@@ -106,76 +111,93 @@ defmodule Algae.Internal do
         apply(module, :new, args)
       end
 
-      defoverridable unquote(override_list) ++ [type: 1]
+      defoverridable unquote(newp_override_list) ++ unquote(new_override_list) ++ [type: 1]
 
       # override `new/*` data constructors with typechecked ones
       unquote do
         [scanned_args_without_defaults, scanned_types]
-        |> add_overrides_if_not_empty(opts)
+        # |> add_overrides_if_not_empty(opts)
         |> Enum.zip()
-        |> Enum.map(&override_new/1)
+        |> Enum.map(&override_newp/1)
       end
       # override_data_constructors(scanned_args_without_defaults, scanned_types)
     end
   end
 
-  defp add_overrides_if_not_empty(list, []) do
-    list
-  end
-  defp add_overrides_if_not_empty([l, _] = list, [overrides: news]) do
-    IO.inspect(length(l))
-    IO.inspect(news)
+  # defp add_overrides_if_not_empty(list, []) do
+  #   list
+  # end
+  # defp add_overrides_if_not_empty([l, _] = list, [overrides: news]) do
+  #   IO.inspect(length(l))
+  #   IO.inspect(news)
 
-    overrides =
-      Enum.map(
-        1..length(l),
-        fn(arity) ->
-          case news[:"new/#{arity}"] do
-            nil -> :noop
-            fun -> fun
-          end
-        end
-      )
+  #   overrides =
+  #     Enum.map(
+  #       1..length(l),
+  #       fn(arity) ->
+  #         case news[:"new/#{arity}"] do
+  #           nil -> :noop
+  #           fun -> fun
+  #         end
+  #       end
+  #     )
 
-    IO.inspect(overrides)
+  #   IO.inspect(overrides)
 
-    list ++ [overrides]
-  end
+  #   list ++ [overrides]
+  # end
 
   # length(types) == length(args) or something is messed up during client-side declaration
   # `override` is the overriding fun for the `new` constructor with a specific arity (eg., new/2)
-  defp override_new({args, types}) do
-    override_new({args, types, :noop})
-  end
-  defp override_new({args, types, override}) do
-    IO.inspect("override_new's args: ")
-    IO.inspect({args, types, override})
+  # defp override_newp({args, types}) do
+  #   override_newp({args, types, :noop})
+  # end
+  # defp override_newp({args, types, override}) do
+  defp override_newp({args, types}) do
+    IO.inspect("override_newp's args: ")
+    # IO.inspect({args, types, override})
+    IO.inspect({args, types})
+
+    # new_args =
+    #   case override do
+    #     :noop ->
+    #       args
+    #     fun ->
+    #         fun.(args)
+    #   end
+
+    # IO.inspect("override_newp's new_args: ")
+    # IO.inspect(new_args)
+
     quote do
       # def unquote({:new, [], args}) do
-      def new(unquote_splicing(args)) do
-        IO.inspect("new/*'s override: ")
-        IO.inspect(unquote(override))
+      def newp(unquote_splicing(args)) do
+        # IO.inspect("new/*'s override: ")
+        # IO.inspect(unquote(override))
         IO.inspect("new/*'s arguments: ")
         IO.inspect(unquote(args))
+        # IO.inspect("new_args unquoted: ")
+        # IO.inspect(unquote(new_args))
 
-        case unquote(override) do
-          :noop ->
-            (fn(unquote_splicing(args)) -> :noop end).(unquote_splicing(args))
-          fun ->
-            fun.(unquote_splicing(args))
-        end
-        # if override != :noop do
-        #   args
-        #   |> List.last()
-        #   |> override.()
-        # end
+        # new_args =
+        #   case unquote(override) do
+        #     :noop ->
+        #       (fn(unquote_splicing(args)) -> args end).(unquote_splicing(args))
+        #       # (fn(unquote_splicing(args)) ->
+        #       #   raise(UndefinedFunctionError, "constructor redefined")
+        #       # end).(unquote_splicing(args))
+        #     fun ->
+        #       fun.(unquote_splicing(args))
+        #   end
+
+        # IO.inspect("new_args: ")
+        # IO.inspect(new_args)
 
         unquote do: do_typecheck(types, args)
         super(unquote_splicing(args))
       end
     end
   end
-  # TODO: 1. remove overriding 2. put typecheck in defpartialx body
 
   defp do_typecheck(type_functions, functions_args) do
     IO.puts("do_typecheck's type_functions before quote:")

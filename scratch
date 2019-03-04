@@ -19,14 +19,16 @@ end
 
 defmodule Person do
   import Algae
-  # defdatax do
+  defdatax do
   # defdatax overrides: ["new/1": fn(name) -> IO.puts("WORKS: #{name}") end] do
-  defdatax overrides: ["new/1": fn(_) -> raise(UndefinedFunctionError, "locked") end] do
-  # defdatax overrides: ["new/2": fn(name, age) -> IO.puts("WORKS: #{name} #{age}") end] do
+  # defdatax overrides: ["new/1": fn(_) -> raise(UndefinedFunctionError, "locked") end] do
+  # defdatax overrides: ["new/2": fn(name, age) -> IO.puts("WORKS: #{name} #{age}"); ["miez", 7] end] do
   # defdatax overrides: ["new/1": fn(name) -> IO.puts("WORKS: #{name}") end, "new/2": fn(a,b) -> IO.puts("WORKS #{a} #{b}") end] do
     name :: string
     age  :: integer
   end
+
+  def new(name), do: raise(UndefinedFunctionError, "lofa")
 end
 Person.new
 Person.new("lofa")
@@ -74,7 +76,7 @@ end
 
 def mod(num, denom) do
   inter = rem(num, denom)
-  if inter < 0 do denom + inter else denom end 
+  if inter < 0 do denom + inter else denom end
 end
 
 defdata Clock do
@@ -91,26 +93,43 @@ five_minutes = %Clock{hour: -1, minute: 55}
 defmodule Clock do
   import Algae
 
+  defdatax do
+    hour :: Clock.Hour
+    minute :: Clock.Minute
+  end
+
+  def new(hour, minute) do
+    h = Clock.Hour.new(hour)
+    m = Clock.Minute.new(minute)
+    super(h,m)
+  end
+
   def mod(num, denom) do
     inter = rem(num, denom)
-    if inter < 0 do denom + inter else denom end 
+    if inter < 0 do denom + inter else inter end
   end
 
   defmodule Hour do
-    import Algae
     defdatax do
       hour :: integer
     end
-    def mod(num, denom) do
-      inter = rem(num, denom)
-      if inter < 0 do denom + inter else denom end 
-    end
+
     def new(hour) do
       hour
-      |> mod(24)
+      |> Clock.mod(24)
       |> super()
     end
   end
+
   defmodule Minute do
+    defdatax do
+      minute :: integer
+    end
+
+    def new(minute) do
+      minute
+      |> Clock.mod(60)
+      |> super()
+    end
   end
 end
