@@ -89,6 +89,7 @@ defmodule Algae.Internal do
         struct(__MODULE__, unquote(defaults))
       end
 
+      # This trick allows overriding but won't allow partial type checking...
       defpartialx new(unquote_splicing(args_without_defaults)) do
         newp(unquote_splicing(args_without_defaults))
       end
@@ -192,6 +193,42 @@ defmodule Algae.Internal do
 
         # IO.inspect("new_args: ")
         # IO.inspect(new_args)
+
+        # Why does this work?
+        # -------------------
+        # Had  to spent  half an  hour figuring  it out,  even
+        # though I wrote this only 2 days ago...
+        #
+        # `defpartialx` works along the example below, and the
+        # it is marked where `do_typecheck` is inserted:
+        #
+        #                 do_typecheck
+        #                     V
+        #   def new(),        | do: fn(a) -> apply(__MODULE__, :new, [a]      ) end
+        #   def new(a),       | do: fn(b) -> apply(__MODULE__, :new, [a, b]   ) end
+        #   def new(a,b),     | do: fn(c) -> apply(__MODULE__, :new, [a, b, c]) end
+        #   def new(a, b, c), | do: a - b - c
+        #                     ^
+        #
+        # All `newp`  variants succeed  in doing  type checks.
+        # Taking the `Person` example in "scratch":
+        #
+        #     (It may be obvious why  this works, but I'm not that
+        #     smart, and have to write it down.)
+        #
+        #     `Person.newp.(27)`:
+        #     > `newp/0` returns an `fn/1`  that calls `newp/1`, and
+        #     > then the inserted type check.
+        #
+        #     `Person.newp(27)`:
+        #     > Calls `newp/1` with the inserted type check directly.
+        #
+        #     `Person.newp.("lofa").(:a)`:
+        #     `Person.newp("lofa").(:a)`:
+        #     `Person.newp("lofa", :a)`:
+        #     > Maybe there is no need to expand on these after all.
+        #
+        #     (`Person.newp.("lofa",27)` not possible yet.)
 
         unquote do: do_typecheck(types, args)
         super(unquote_splicing(args))
