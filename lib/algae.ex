@@ -193,7 +193,7 @@ defmodule Algae do
     end
   end
 
-  defmacro defdatax(ast) do
+  defmacro defdatax(opts \\ [], ast) do
     caller_module = __CALLER__.module
 
     case ast do
@@ -224,10 +224,11 @@ defmodule Algae do
       #   data_ast(caller_module, type)
 
       [do: {:__block__, _, lines}] ->
-        data_astx(lines, __CALLER__)
+        IO.inspect(opts)
+        data_astx(lines, __CALLER__, opts)
 
       [do: line] ->
-        data_astx([line], __CALLER__)
+        data_astx([line], __CALLER__, opts)
     end
   end
 

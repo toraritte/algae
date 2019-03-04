@@ -25,7 +25,7 @@ defmodule Algae.Internal do
   end
 
   # x as in experimental. (No clue why I haven't done this in previous commits...)
-  def data_astx(lines, %{aliases: _} = caller) when is_list(lines) do
+  def data_astx(lines, %{aliases: _} = caller, opts) when is_list(lines) do
     {field_values, field_types, specs, args, defaults} = module_elements(lines, caller)
 
     IO.puts("data_astx's field_types:")
@@ -41,6 +41,9 @@ defmodule Algae.Internal do
       # for arity <- 0..Enum.count(args) do
       #   {:new, arity}
       # end
+    IO.puts("data_astx's override_list:")
+    IO.inspect(override_list)
+    IO.puts("---")
 
     args_without_defaults =
       Enum.map(args, fn({:\\, [], [stripped, _]}) -> stripped end)
@@ -108,31 +111,78 @@ defmodule Algae.Internal do
       # override `new/*` data constructors with typechecked ones
       unquote do
         [scanned_args_without_defaults, scanned_types]
+        |> add_overrides_if_not_empty(opts)
         |> Enum.zip()
         |> Enum.map(&override_new/1)
       end
       # override_data_constructors(scanned_args_without_defaults, scanned_types)
-
     end
   end
 
+  defp add_overrides_if_not_empty(list, []) do
+    list
+  end
+  defp add_overrides_if_not_empty([l, _] = list, [overrides: news]) do
+    IO.inspect(length(l))
+    IO.inspect(news)
+
+    overrides =
+      Enum.map(
+        1..length(l),
+        fn(arity) ->
+          case news[:"new/#{arity}"] do
+            nil -> :noop
+            fun -> fun
+          end
+        end
+      )
+
+    IO.inspect(overrides)
+
+    list ++ [overrides]
+  end
+
   # length(types) == length(args) or something is messed up during client-side declaration
+  # `override` is the overriding fun for the `new` constructor with a specific arity (eg., new/2)
   defp override_new({args, types}) do
+    override_new({args, types, :noop})
+  end
+  defp override_new({args, types, override}) do
+    IO.inspect("override_new's args: ")
+    IO.inspect({args, types, override})
     quote do
       # def unquote({:new, [], args}) do
       def new(unquote_splicing(args)) do
+        IO.inspect("new/*'s override: ")
+        IO.inspect(unquote(override))
+        IO.inspect("new/*'s arguments: ")
+        IO.inspect(unquote(args))
+
+        case unquote(override) do
+          :noop ->
+            (fn(unquote_splicing(args)) -> :noop end).(unquote_splicing(args))
+          fun ->
+            fun.(unquote_splicing(args))
+        end
+        # if override != :noop do
+        #   args
+        #   |> List.last()
+        #   |> override.()
+        # end
+
         unquote do: do_typecheck(types, args)
         super(unquote_splicing(args))
       end
     end
   end
+  # TODO: 1. remove overriding 2. put typecheck in defpartialx body
 
   defp do_typecheck(type_functions, functions_args) do
-    IO.puts("do_typecheck before quote:")
+    IO.puts("do_typecheck's type_functions before quote:")
     IO.inspect(type_functions)
     IO.puts("---")
     quote do
-      IO.puts("do_typecheck after quote:")
+      IO.puts("do_typecheck's type_functions after quote:")
       IO.inspect(unquote(type_functions))
       IO.puts("---")
       for {type, arg} <- Enum.zip(unquote(type_functions), unquote(functions_args)) do
