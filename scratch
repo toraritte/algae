@@ -90,6 +90,13 @@ five_minutes = %Clock{hour: -1, minute: 55}
 %five_minutes{minute: 102}
 # => Clock[hour: 23, minute: 42]
 
+[
+  hour: {:__aliases__, [line: 5], [:Hour]},
+  minute: {:__aliases__, [line: 6], [:Minute]}
+]
+
+{:minute, {:__aliases__, [line: 45], [:Clock, :Minute]}}
+
 defmodule Clock do
   import Algae
 
@@ -133,3 +140,52 @@ defmodule Clock do
     end
   end
 end
+
+# =======================================
+
+defmodule Hour do
+  import Algae
+  defdatax do
+    hour :: integer
+  end
+
+  def new(hour) do
+    hour
+    |> Clock.mod(24)
+    |> super()
+  end
+end
+
+defmodule Minute do
+  import Algae
+  defdatax do
+    minute :: integer
+  end
+
+  def new(minute) do
+    minute
+    |> Clock.mod(60)
+    |> super()
+  end
+end
+
+defmodule Clock do
+  import Algae
+
+  defdatax do
+    hour :: Hour
+    minute :: Minute
+  end
+
+  def new(hour, minute) do
+    h = Hour.new(hour)
+    m = Minute.new(minute)
+    super(h,m)
+  end
+
+  def mod(num, denom) do
+    inter = rem(num, denom)
+    if inter < 0 do denom + inter else inter end
+  end
+end
+

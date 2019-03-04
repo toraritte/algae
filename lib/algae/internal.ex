@@ -62,7 +62,7 @@ defmodule Algae.Internal do
         fn
           ({field, {type, _ctx, nil}}, {fs, ts}) when is_atom(type) ->
             {[field|fs],[{:prim, type}|ts]}
-          ({field, {:__aliases__, _ctx, [_module]} = type}, {fs, ts}) ->
+          ({field, {:__aliases__, _ctx, _mod_atom_list} = type}, {fs, ts}) ->
             {[field|ts],[{:algae, type}|ts]}
           # ({field_name, _} = field) ->
           #   IO.puts("types' field:")
@@ -327,6 +327,7 @@ defmodule Algae.Internal do
           [{field(), any()}]
         }
   def module_elements(lines, caller) do
+        # import IEx; pry
     List.foldr(lines, {[], [], [], [], []},
       fn(line, {value_acc, type_acc, typespec_acc, acc_arg, acc_mapping}) ->
         {field, type, default_value} = normalize_elements(line, caller)
@@ -344,9 +345,15 @@ defmodule Algae.Internal do
   end
 
   @spec normalize_elements(ast(), Macro.Env.t()) :: {atom(), type(), any()}
+  # {:::, [line: 6], [{:minute, [line: 6], nil}, {:__aliases__, [line: 6], [:Minute]}]}
+  # {:::, [line: 8], [{:minute, [line: 8], nil}, {:__aliases__, [line: 8], [:Clock, :Minute]}]}
+  # {:::, _,         [{field,    _,          _}, type                                        ]}, caller do
   def normalize_elements({:::, _, [{field, _, _}, type]}, caller) do
     expanded_type = resolve_alias(type, caller)
     {field, expanded_type, default_value(expanded_type)}
+    # expanded_type ==
+    # {:__aliases__, [line: 6], [:Minute]}
+    # {:__aliases__, [line: 8], [:Clock, :Minute]}
   end
 
   def normalize_elements({:\\, _, [{:::, _, [{field, _, _}, type]}, default]}, _) do
@@ -355,15 +362,27 @@ defmodule Algae.Internal do
 
   @spec resolve_alias(ast(), Macro.Env.t()) :: ast()
   def resolve_alias({{_, _, _} = a, b, c}, caller) do
+        # import IEx; pry
     {resolve_alias(a, caller), b, c}
   end
 
   def resolve_alias({:. = a, b, [{:__aliases__, _, _} = the_alias | rest]}, caller) do
+        # import IEx; pry
     resolved_alias = Macro.expand(the_alias, caller)
     {a, b, [resolved_alias | rest]}
   end
 
-  def resolve_alias(a, _), do: a
+  # TODO the above resolve clauses never seem to match
+  # {:__aliases__, [line: 6], [:Minute]}
+  # {:__aliases__, [line: 8], [:Clock, :Minute]}
+  # def resolve_alias({:__aliases__, _ctx, _mod_atom_list} = the_alias, caller) do
+  #   Macro.expand_once(the_alias, caller)
+  # end
+
+  def resolve_alias(a, caller) do
+      # import IEx; pry
+    a
+  end
 
   @spec or_types([ast()], module()) :: [ast()]
   def or_types({:\\, _, [{:::, _, [_, types]}, _]}, module_ctx) do
@@ -439,7 +458,10 @@ defmodule Algae.Internal do
 
   def default_value([_]), do: []
 
+  # {:__aliases__, [line: 6], [:Minute]}
+  # {:__aliases__, [line: 8], [:Clock, :Minute]}
   def default_value({type, _, _}) do
+    # import IEx; pry()
     case type do
       :boolean -> false
 
@@ -468,4 +490,7 @@ defmodule Algae.Internal do
       atom -> atom
     end
   end
+
+  # `default_value` not needed for the type checker version
+  def default_value(_), do: :noop
 end
