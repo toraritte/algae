@@ -55,6 +55,8 @@ defmodule Algae.Internal do
     scanned_args_without_defaults =
       Enum.scan(args_without_defaults, [], &(&2 ++ [&1]))
 
+    arity = length(args_without_defaults)
+
     {fields, types} =
       List.foldr(
         field_types,
@@ -77,6 +79,7 @@ defmodule Algae.Internal do
 
     quote do
       use Quark
+
       @type t :: %__MODULE__{unquote_splicing(field_types)}
       defstruct unquote(field_values)
 
@@ -90,9 +93,43 @@ defmodule Algae.Internal do
       end
 
       # This trick allows overriding but won't allow partial type checking...
-      defpartialx new(unquote_splicing(args_without_defaults)) do
-        newp(unquote_splicing(args_without_defaults))
-      end
+      # defpartialx new(unquote_splicing(args_without_defaults)) do
+      #   newp(unquote_splicing(args_without_defaults))
+      # end
+
+      # track_partial new: &newp/unquote(arity)
+
+      # def new(), do: fn(a)    -> apply(__MODULE__, :new, [a]) end
+      # def new(a), do: fn(b)   -> apply(__MODULE__, :new, [a, b]) end
+      # def new(a,b), do: fn(c) -> apply(__MODULE__, :new, [a, b, c]) end
+      # def new(a, b, c), do: a - b - c
+      #
+      # defmodule A do
+      #   def new(),    do: fn(a) -> Person.newp(a)   end
+      #   def new(a),   do: fn(b) -> Person.newp(a,b) end
+      #   def new(a,b), do: Person.newp(a,b)
+      # end
+
+      unquote do: Enum.map(
+        [[]] ++ scanned_args_without_defaults,
+        fn(a) ->
+          case length(a) == arity do
+            false ->
+              quote do
+                def new(unquote_splicing(a)) do
+                  fn(curried) ->
+                    apply(__MODULE__, :newp, unquote(a))
+                  end
+                end
+              end
+            true ->
+              quote do
+                def new(unquote_splicing(a)) do
+                  apply(__MODULE__, :newp, unquote(a))
+                end
+              end
+          end
+        end)
 
       def type(%module{} = data) do
         IO.puts("type's data:")
@@ -112,10 +149,12 @@ defmodule Algae.Internal do
         apply(module, :new, args)
       end
 
+      # defoverridable unquote(newp_override_list)  ++ [type: 1]
       defoverridable unquote(newp_override_list) ++ unquote(new_override_list) ++ [type: 1]
 
       # override `new/*` data constructors with typechecked ones
       unquote do
+        # add [[]] to both
         [scanned_args_without_defaults, scanned_types]
         # |> add_overrides_if_not_empty(opts)
         |> Enum.zip()
@@ -125,6 +164,56 @@ defmodule Algae.Internal do
     end
   end
 
+  # def new(), do: fn(a)    -> apply(__MODULE__, :new, [a]) end
+  # def new(a), do: fn(b)   -> apply(__MODULE__, :new, [a, b]) end
+  # def new(a,b), do: fn(c) -> apply(__MODULE__, :new, [a, b, c]) end
+  # def new(a, b, c), do: a - b - c
+  #
+  # defmodule A do
+  #   def new(),    do: fn(a) -> Person.newp(a)   end
+  #   def new(a),   do: fn(b) -> Person.newp(a,b) end
+  #   def new(a,b), do: Person.newp(a,b)
+  # end
+  #
+  # # [new: {:/, [line: 91], [{:a_local, [line: 91], nil}, 2]}]
+  #   defmacro track_partial([{tracking_name, {:/, _, [{tracked_fun, _, nil}, tracked_arity]}}]) do
+  #   end
+
+  defmacro track_partial(ast), do: IO.inspect(ast)
+# [ new: {:&, [line: 91], [ {:/, [line: 91], [ {{:., [line: 91], [{:__aliases__, [line: 91], [:Quark, :Partial]}, :defpartial]}, [line: 91], []}, 2 ]} ]} ]
+  # defmacro track_partial([{tracking_name, {:&, _, [{:/, _, [{{:., _, [{:__aliases__, _, tracked_mod}, tracked_fun]}, _, []}, tracked_arity]}]} = tracked}]) do
+
+# [new: {:&, [line: 3], [{:/, [context: Algae.Internal, import: Kernel, line: 3], [{:newp, [line: 3], Algae.Internal}, 2]}]}]
+
+# [new: {:&, [line: 3], [{:/, [context: Algae.Internal, import: Kernel, line: 3], [{{:., [line: 3], [{:__MODULE__, [line: 3], Algae.Internal}, :newp]}, [line: 3], []}, 2]}]} ]
+# defmacro track_partial([{tracking_name, {:&, [line: 3], [{:/, [context: Algae.Internal, import: Kernel, line: 3], [{{:., [line: 3], [{:__MODULE__, [line: 3], Algae.Internal}, :newp]}, [line: 3], []}, 2]}]} }]) do
+#     args = Macro.generate_arguments(tracked_arity, __MODULE__)
+#     scanned_args = [[]] ++ Enum.scan(args, [], &(&2 ++ [&1]))
+
+#     quote do
+#       unquote do: make_curried_clauses(scanned_args, tracking_name, tracked)
+#     end
+#   end
+
+#   defp make_curried_clauses([args], tracking_name, tracked) do
+#     quote do
+#       def unquote({tracking_name, [], args}) do
+#         unquote(tracked).(unquote_splicing(args))
+#       end
+#     end
+#   end
+
+  # defp make_curried_clauses([args|rest], {fun_name, ctx, _} = fun_attrs) do
+  defp make_curried_clauses([args|rest], tracking_name, tracked) do
+    curried = Macro.generate_arguments(1, __MODULE__)
+    quote do
+      def unquote({tracking_name, [], args}) do
+        # fn(unquote(curried)) -> apply(__MODULE__, unquote(fun_name), unquote(args) ++ [curried]) end
+        fn(unquote(curried)) -> unquote(tracked).(unquote_splicing(args ++ [curried])) end
+      end
+      unquote do: make_curried_clauses(rest, tracking_name, tracked)
+    end
+  end
   # defp add_overrides_if_not_empty(list, []) do
   #   list
   # end
@@ -171,6 +260,7 @@ defmodule Algae.Internal do
     # IO.inspect(new_args)
 
     quote do
+      def new
       # def unquote({:new, [], args}) do
       def newp(unquote_splicing(args)) do
         # IO.inspect("new/*'s override: ")

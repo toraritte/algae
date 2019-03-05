@@ -17,6 +17,109 @@ defmodule Int do
   def new(_), do: raise(ArgumentError, "not int")
 end
 
+# iex(4)> defmodule A do
+# ...(4)>   defmacro lofa() do
+# ...(4)>     args = Macro.generate_arguments(2, __MODULE__)
+# ...(4)>     quote do
+# ...(4)>        def miez(unquote_splicing(args)), do: :works
+# ...(4)>     end
+# ...(4)>   end
+# ...(4)> end
+# warning: redefining module A (current version defined in memory)
+#   iex:4
+
+# {:module, A,
+#  <<70, 79, 82, 49, 0, 0, 5, 48, 66, 69, 65, 77, 65, 116, 85, 56, 0, 0, 0, 185,
+#    0, 0, 0, 19, 8, 69, 108, 105, 120, 105, 114, 46, 65, 8, 95, 95, 105, 110,
+#    102, 111, 95, 95, 7, 99, 111, 109, 112, ...>>, {:lofa, 0}}
+# iex(5)> defmodule B do
+# ...(5)> import A
+# ...(5)> lofa()
+# ...(5)> end
+# {:module, B,
+#  <<70, 79, 82, 49, 0, 0, 4, 0, 66, 69, 65, 77, 65, 116, 85, 56, 0, 0, 0, 126, 0,
+#    0, 0, 14, 8, 69, 108, 105, 120, 105, 114, 46, 66, 8, 95, 95, 105, 110, 102,
+#    111, 95, 95, 7, 99, 111, 109, 112, ...>>, {:miez, 2}}
+# iex(6)> B.miez
+# miez/2
+# iex(6)> B.miez(1,2)
+
+  # def new(), do: fn(a)    -> apply(__MODULE__, :new, [a]) end
+  # def new(a), do: fn(b)   -> apply(__MODULE__, :new, [a, b]) end
+  # def new(a,b), do: fn(c) -> apply(__MODULE__, :new, [a, b, c]) end
+  # def new(a, b, c), do: a - b - c
+  #
+  # defmodule A do
+  #   def new(),    do: fn(a) -> Person.newp(a)   end
+  #   def new(a),   do: fn(b) -> Person.newp(a,b) end
+  #   def new(a,b), do: Person.newp(a,b)
+  # end
+defmodule A do
+  defmacro lofa() do
+    args = Macro.generate_arguments(3, __MODULE__)
+    IO.inspect(args)
+
+    scanned_args =
+      [[]] ++ Enum.scan(args, [], &(&2 ++ [&1]))
+
+    quote do
+      use Quark
+
+      defpartialx lofa(a,b,c), do: a-b-c
+
+      # unquote do:  make_tracking_clauses(scanned_args)
+      unquote do: Enum.map(
+        scanned_args,
+        fn(a) ->
+          IO.inspect(length(a) == 3)
+            # def miez(unquote_splicing(a)), do: :works
+          case length(a) == 3 do
+            false ->
+              quote do
+                def miez(unquote_splicing(a)) do
+                  fn(curried) ->
+                    apply(__MODULE__, :lofa, unquote(a))
+                    # lofa(unquote_splicing(a))
+                  end
+                end
+              end
+            true ->
+              quote do
+                def miez(unquote_splicing(a)) do
+                  apply(__MODULE__, :lofa, unquote(a))
+                end
+              end
+          end
+        end)
+    end
+  end
+
+  defp make_tracking_clauses([track_args, next_args|[]]) do
+    quote do
+      def unquote({:miez, [], track_args}) do
+      # def miez(unquote_splicing(track_args)) do
+        lofa(unquote_splicing(track_args))
+      end
+    end
+  end
+
+  defp make_tracking_clauses([track_args, next_args|rest]) do
+    quote do
+      # def miez(unquote_splicing(track_args)) do
+      def unquote({:miez, [], track_args}) do
+        fn(curried) -> lofa(unquote_splicing(next_args)) end
+      end
+      unquote do: make_tracking_clauses(rest)
+    end
+  end
+
+end
+
+defmodule B do
+  import A
+  lofa()
+end
+
 defmodule Person do
   import Algae
   defdatax do
