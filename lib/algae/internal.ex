@@ -37,7 +37,8 @@ defmodule Algae.Internal do
     IO.puts("---")
 
     new_override_list = Enum.map(0..Enum.count(args), &({:new, &1}))
-    newp_override_list = Enum.map(0..Enum.count(args), &({:newp, &1}))
+    # newp/* should be private anyway
+    newp_override_list = Enum.map(1..Enum.count(args), &({:newp, &1}))
       # More verbose, but clearer.
       # for arity <- 0..Enum.count(args) do
       #   {:new, arity}
@@ -110,26 +111,32 @@ defmodule Algae.Internal do
       #   def new(a,b), do: Person.newp(a,b)
       # end
 
-      unquote do: Enum.map(
-        [[]] ++ scanned_args_without_defaults,
-        fn(a) ->
-          case length(a) == arity do
-            false ->
-              quote do
-                def new(unquote_splicing(a)) do
-                  fn(curried) ->
-                    apply(__MODULE__, :newp, unquote(a))
-                  end
-                end
-              end
-            true ->
-              quote do
-                def new(unquote_splicing(a)) do
-                  apply(__MODULE__, :newp, unquote(a))
-                end
-              end
-          end
-        end)
+      unquote do
+        [[[]] ++ scanned_args_without_defaults, [[]] ++ scanned_types]
+        |> Enum.zip()
+        |> Enum.with_index(-arity)
+        |> Enum.map(&track_newp/1)
+        # Enum.map(
+        #   [[]] ++ scanned_args_without_defaults,
+        #   fn(a) ->
+        #     case length(a) == arity do
+        #       false ->
+        #         quote do
+        #           def new(unquote_splicing(a)) do
+        #             fn(curried) ->
+        #               apply(__MODULE__, :newp, unquote(a))
+        #             end
+        #           end
+        #         end
+        #       true ->
+        #         quote do
+        #           def new(unquote_splicing(a)) do
+        #             apply(__MODULE__, :newp, unquote(a))
+        #           end
+        #         end
+        #     end
+        #   end)
+      end
 
       def type(%module{} = data) do
         IO.puts("type's data:")
@@ -146,15 +153,15 @@ defmodule Algae.Internal do
         IO.inspect(args)
         IO.puts("---")
 
-        apply(module, :new, args)
+        apply(module, :newp, args)
       end
+
 
       # defoverridable unquote(newp_override_list)  ++ [type: 1]
       defoverridable unquote(newp_override_list) ++ unquote(new_override_list) ++ [type: 1]
 
       # override `new/*` data constructors with typechecked ones
       unquote do
-        # add [[]] to both
         [scanned_args_without_defaults, scanned_types]
         # |> add_overrides_if_not_empty(opts)
         |> Enum.zip()
@@ -243,6 +250,72 @@ defmodule Algae.Internal do
   #   override_newp({args, types, :noop})
   # end
   # defp override_newp({args, types, override}) do
+
+  # Why does this work?
+  # -------------------
+  # Had  to spent  half an  hour figuring  it out,  even
+  # though I wrote this only 2 days ago...
+  #
+  # `defpartialx` works along the example below, and the
+  # it is marked where `do_typecheck` is inserted:
+  #
+  #                 do_typecheck
+  #                     V
+  #   def new(),        | do: fn(a) -> apply(__MODULE__, :new, [a]      ) end
+  #   def new(a),       | do: fn(b) -> apply(__MODULE__, :new, [a, b]   ) end
+  #   def new(a,b),     | do: fn(c) -> apply(__MODULE__, :new, [a, b, c]) end
+  #   def new(a, b, c), | do: a - b - c
+  #                     ^
+  #
+  # All `newp`  variants succeed  in doing  type checks.
+  # Taking the `Person` example in "scratch":
+  #
+  #     (It may be obvious why  this works, but I'm not that
+  #     smart, and have to write it down.)
+  #
+  #     `Person.newp.(27)`:
+  #     > `newp/0` returns an `fn/1`  that calls `newp/1`, and
+  #     > then the inserted type check.
+  #
+  #     `Person.newp(27)`:
+  #     > Calls `newp/1` with the inserted type check directly.
+  #
+  #     `Person.newp.("lofa").(:a)`:
+  #     `Person.newp("lofa").(:a)`:
+  #     `Person.newp("lofa", :a)`:
+  #     > Maybe there is no need to expand on these after all.
+  #
+  #     (`Person.newp.("lofa",27)` not possible yet.)
+
+  defp track_newp({{[], []}, _}) do
+    quote do
+      def new() do
+        fn(curried) -> apply(__MODULE__, :new, [curried]) end
+      end
+    end
+  end
+
+  defp track_newp({{args, types}, 0}) do
+    quote do
+      def new(unquote_splicing(args)) do
+        # no need to typecheck because newp/(last_arity) has already does it
+        apply(__MODULE__, :newp, unquote(args))
+      end
+    end
+  end
+
+  defp track_newp({{args, types}, n}) do
+    IO.puts("track_newp's n: #{n}")
+    quote do
+      def new(unquote_splicing(args)) do
+        unquote do: do_typecheck(types, args)
+        fn(curried) ->
+          apply(__MODULE__, :newp, unquote(args) ++ [curried])
+        end
+      end
+    end
+  end
+
   defp override_newp({args, types}) do
     IO.inspect("override_newp's args: ")
     # IO.inspect({args, types, override})
@@ -260,8 +333,7 @@ defmodule Algae.Internal do
     # IO.inspect(new_args)
 
     quote do
-      def new
-      # def unquote({:new, [], args}) do
+
       def newp(unquote_splicing(args)) do
         # IO.inspect("new/*'s override: ")
         # IO.inspect(unquote(override))
@@ -283,42 +355,6 @@ defmodule Algae.Internal do
 
         # IO.inspect("new_args: ")
         # IO.inspect(new_args)
-
-        # Why does this work?
-        # -------------------
-        # Had  to spent  half an  hour figuring  it out,  even
-        # though I wrote this only 2 days ago...
-        #
-        # `defpartialx` works along the example below, and the
-        # it is marked where `do_typecheck` is inserted:
-        #
-        #                 do_typecheck
-        #                     V
-        #   def new(),        | do: fn(a) -> apply(__MODULE__, :new, [a]      ) end
-        #   def new(a),       | do: fn(b) -> apply(__MODULE__, :new, [a, b]   ) end
-        #   def new(a,b),     | do: fn(c) -> apply(__MODULE__, :new, [a, b, c]) end
-        #   def new(a, b, c), | do: a - b - c
-        #                     ^
-        #
-        # All `newp`  variants succeed  in doing  type checks.
-        # Taking the `Person` example in "scratch":
-        #
-        #     (It may be obvious why  this works, but I'm not that
-        #     smart, and have to write it down.)
-        #
-        #     `Person.newp.(27)`:
-        #     > `newp/0` returns an `fn/1`  that calls `newp/1`, and
-        #     > then the inserted type check.
-        #
-        #     `Person.newp(27)`:
-        #     > Calls `newp/1` with the inserted type check directly.
-        #
-        #     `Person.newp.("lofa").(:a)`:
-        #     `Person.newp("lofa").(:a)`:
-        #     `Person.newp("lofa", :a)`:
-        #     > Maybe there is no need to expand on these after all.
-        #
-        #     (`Person.newp.("lofa",27)` not possible yet.)
 
         unquote do: do_typecheck(types, args)
         super(unquote_splicing(args))
