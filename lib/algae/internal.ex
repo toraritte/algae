@@ -251,27 +251,75 @@ defmodule Algae.Internal do
   # end
   # defp override_newp({args, types, override}) do
 
-  # Why does this work?
-  # -------------------
-  # Had  to spent  half an  hour figuring  it out,  even
-  # though I wrote this only 2 days ago...
+  # RATIONAlES
   #
-  # `defpartialx` works along the example below, and the
-  # it is marked where `do_typecheck` is inserted:
+  # `override_newp/1`
+  # -----------------
   #
-  #                 do_typecheck
-  #                     V
-  #   def new(),        | do: fn(a) -> apply(__MODULE__, :new, [a]      ) end
-  #   def new(a),       | do: fn(b) -> apply(__MODULE__, :new, [a, b]   ) end
-  #   def new(a,b),     | do: fn(c) -> apply(__MODULE__, :new, [a, b, c]) end
-  #   def new(a, b, c), | do: a - b - c
-  #                     ^
+  # Only  avenues  I  could  think  of  to  inject  type
+  # checking:
+  #
+  #  1. Override the clauses created by
+  #     `Quark.Partial.defpartialx`
+  #     (current, see below)
+  #
+  #  2. Modify `Quark.Partial.defpartialx`
+  #     by taking an extra anon fun argument
+  #
+  #     > Didn't  like option  2 because  it looked  ugly, and
+  #     > this functionality doesn't belong there (although it
+  #     > would've make it easier).
+  #
+  #  3. Re-implement `defpartialx` macro in `Algae.Internal`
+  #
+  #     > Probably the cleanest (?).
+  #
+  # `Quark.Partial.defpartialx` works along  the example
+  # below, and it is  marked where `do_typecheck` is
+  # inserted by overriding clauses after creation:
+  #
+  #                  do_typecheck
+  #                      V
+  #   def newp(),        | do: fn(a) -> apply(__MODULE__, :new, [a]      ) end
+  #   def newp(a),       | do: fn(b) -> apply(__MODULE__, :new, [a, b]   ) end
+  #   def newp(a,b),     | do: fn(c) -> apply(__MODULE__, :new, [a, b, c]) end
+  #   def newp(a, b, c), | do: a - b - c
+  #                      ^
+  #
+  # Although,  overriding the  `new` constructor  raises
+  # the  issue that  it cannot  be further  overriden in
+  # user modules, hence `track_newp/1`.
+
+  # `track_newp/1`
+  # --------------
+  #
+  # Renamed  the  type-checked  partial  constructor  to
+  # `newp`  and `track_newp/1`  creates  a public  `new`
+  # constructor  tracking every  `newp` clause,  so that
+  # the constructor can be overriden in user modules.
+  #
+  # Tried   to  eliminate   the   need  for   overriding
+  # (`override_newp/1`) and tracking (`track_newp/1`) by
+  # only tracking, but that  would need `defpartialx` to
+  # have the ability to inject a fun.
+  #
+  # (Not being that smart, a note to myself  why  simple
+  # tracking wouldn't  work: imagine that  type checking
+  # is not injected in the above `newp` clauses.
+  #
+  #     tc - typecheck
+  #     cr - curried argument
+  #
+  #     def track(a), do: tc; fn(cr) -> newp(a,cr)
+  #     def track(a,b), do: tc; fn(cr) -> newp(a,b,cr)
+  #     ...
+  #     def track(a, b, ..., n), do: tc; newp(a, b, ..., n)
+  #
+  #     The typecheck would only last as long as getting on the `newp` track.
+  #
   #
   # All `newp`  variants succeed  in doing  type checks.
   # Taking the `Person` example in "scratch":
-  #
-  #     (It may be obvious why  this works, but I'm not that
-  #     smart, and have to write it down.)
   #
   #     `Person.newp.(27)`:
   #     > `newp/0` returns an `fn/1`  that calls `newp/1`, and

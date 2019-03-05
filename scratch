@@ -321,12 +321,13 @@ defmodule AcuteTriangle do
     angle2 :: float
   end
 
-  # def new(alfa, beta) do
-  #   case abs(alfa - beta) < 90.0 do
-  #     false ->
-  #       raise(ArgumentError, "angles are not acute")
-  #     true ->
-  #       super(alfa, beta)
-  #   end
-  # end
+  def new(alfa, beta) do
+    case abs(alfa - beta) < 90.0 do
+      false ->
+        super(alfa, beta)
+        raise(ArgumentError, "angles are not acute")
+      true ->
+        super(alfa, beta)
+    end
+  end
 end
