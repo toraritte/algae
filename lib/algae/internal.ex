@@ -28,14 +28,6 @@ defmodule Algae.Internal do
   def data_astx(lines, %{aliases: _} = caller, opts) when is_list(lines) do
     {field_values, field_types, specs, args, defaults} = module_elements(lines, caller)
 
-    IO.puts("data_astx's field_types:")
-    IO.inspect(field_types)
-    IO.puts("---")
-
-    IO.puts("data_astx's defaults:")
-    IO.inspect(defaults)
-    IO.puts("---")
-
     new_override_list = Enum.map(0..Enum.count(args), &({:new, &1}))
     # newp/* should be private anyway
     newp_override_list = Enum.map(1..Enum.count(args), &({:newp, &1}))
@@ -43,15 +35,9 @@ defmodule Algae.Internal do
       # for arity <- 0..Enum.count(args) do
       #   {:new, arity}
       # end
-    IO.puts("data_astx's newp_override_list:")
-    IO.inspect(newp_override_list)
-    IO.puts("---")
 
     args_without_defaults =
       Enum.map(args, fn({:\\, [], [stripped, _]}) -> stripped end)
-    IO.puts("args_without_defaults:")
-    IO.inspect(args_without_defaults)
-    IO.puts("---")
 
     scanned_args_without_defaults =
       Enum.scan(args_without_defaults, [], &(&2 ++ [&1]))
@@ -67,16 +53,10 @@ defmodule Algae.Internal do
             {[field|fs],[{:prim, type}|ts]}
           ({field, {:__aliases__, _ctx, _mod_atom_list} = type}, {fs, ts}) ->
             {[field|ts],[{:algae, type}|ts]}
-          # ({field_name, _} = field) ->
-          #   IO.puts("types' field:")
-          #   IO.inspect(field)
-          #   IO.puts("---")
-          #   field_name
         end
       )
     scanned_types =
       Enum.scan(types, [], &(&2 ++ [&1]))
-    # import IEx; pry()
 
     quote do
       use Quark
@@ -87,77 +67,27 @@ defmodule Algae.Internal do
       @doc "Positional constructor, with args in the same order as they were defined in"
 
       defpartialx newp(unquote_splicing(args_without_defaults)) do
-        IO.puts("unquoted args_without_defaults:")
-        IO.inspect(unquote(args_without_defaults))
-        IO.puts("---")
         struct(__MODULE__, unquote(defaults))
       end
-
-      # This trick allows overriding but won't allow partial type checking...
-      # defpartialx new(unquote_splicing(args_without_defaults)) do
-      #   newp(unquote_splicing(args_without_defaults))
-      # end
-
-      # track_partial new: &newp/unquote(arity)
-
-      # def new(), do: fn(a)    -> apply(__MODULE__, :new, [a]) end
-      # def new(a), do: fn(b)   -> apply(__MODULE__, :new, [a, b]) end
-      # def new(a,b), do: fn(c) -> apply(__MODULE__, :new, [a, b, c]) end
-      # def new(a, b, c), do: a - b - c
-      #
-      # defmodule A do
-      #   def new(),    do: fn(a) -> Person.newp(a)   end
-      #   def new(a),   do: fn(b) -> Person.newp(a,b) end
-      #   def new(a,b), do: Person.newp(a,b)
-      # end
 
       unquote do
         [[[]] ++ scanned_args_without_defaults, [[]] ++ scanned_types]
         |> Enum.zip()
         |> Enum.with_index(-arity)
         |> Enum.map(&track_newp/1)
-        # Enum.map(
-        #   [[]] ++ scanned_args_without_defaults,
-        #   fn(a) ->
-        #     case length(a) == arity do
-        #       false ->
-        #         quote do
-        #           def new(unquote_splicing(a)) do
-        #             fn(curried) ->
-        #               apply(__MODULE__, :newp, unquote(a))
-        #             end
-        #           end
-        #         end
-        #       true ->
-        #         quote do
-        #           def new(unquote_splicing(a)) do
-        #             apply(__MODULE__, :newp, unquote(a))
-        #           end
-        #         end
-        #     end
-        #   end)
       end
 
       def type(%module{} = data) do
-        IO.puts("type's data:")
-        IO.inspect(data)
-        IO.puts("---")
-
         args =
           Enum.map(
             unquote(fields),
             &Map.get(data,&1)
           )
 
-        IO.puts("type/1 args:")
-        IO.inspect(args)
-        IO.puts("---")
-
         apply(module, :newp, args)
       end
 
 
-      # defoverridable unquote(newp_override_list)  ++ [type: 1]
       defoverridable unquote(newp_override_list) ++ unquote(new_override_list) ++ [type: 1]
 
       # override `new/*` data constructors with typechecked ones
@@ -167,92 +97,11 @@ defmodule Algae.Internal do
         |> Enum.zip()
         |> Enum.map(&override_newp/1)
       end
-      # override_data_constructors(scanned_args_without_defaults, scanned_types)
     end
   end
 
-  # def new(), do: fn(a)    -> apply(__MODULE__, :new, [a]) end
-  # def new(a), do: fn(b)   -> apply(__MODULE__, :new, [a, b]) end
-  # def new(a,b), do: fn(c) -> apply(__MODULE__, :new, [a, b, c]) end
-  # def new(a, b, c), do: a - b - c
-  #
-  # defmodule A do
-  #   def new(),    do: fn(a) -> Person.newp(a)   end
-  #   def new(a),   do: fn(b) -> Person.newp(a,b) end
-  #   def new(a,b), do: Person.newp(a,b)
-  # end
-  #
-  # # [new: {:/, [line: 91], [{:a_local, [line: 91], nil}, 2]}]
-  #   defmacro track_partial([{tracking_name, {:/, _, [{tracked_fun, _, nil}, tracked_arity]}}]) do
-  #   end
+  # RATIONALES
 
-  defmacro track_partial(ast), do: IO.inspect(ast)
-# [ new: {:&, [line: 91], [ {:/, [line: 91], [ {{:., [line: 91], [{:__aliases__, [line: 91], [:Quark, :Partial]}, :defpartial]}, [line: 91], []}, 2 ]} ]} ]
-  # defmacro track_partial([{tracking_name, {:&, _, [{:/, _, [{{:., _, [{:__aliases__, _, tracked_mod}, tracked_fun]}, _, []}, tracked_arity]}]} = tracked}]) do
-
-# [new: {:&, [line: 3], [{:/, [context: Algae.Internal, import: Kernel, line: 3], [{:newp, [line: 3], Algae.Internal}, 2]}]}]
-
-# [new: {:&, [line: 3], [{:/, [context: Algae.Internal, import: Kernel, line: 3], [{{:., [line: 3], [{:__MODULE__, [line: 3], Algae.Internal}, :newp]}, [line: 3], []}, 2]}]} ]
-# defmacro track_partial([{tracking_name, {:&, [line: 3], [{:/, [context: Algae.Internal, import: Kernel, line: 3], [{{:., [line: 3], [{:__MODULE__, [line: 3], Algae.Internal}, :newp]}, [line: 3], []}, 2]}]} }]) do
-#     args = Macro.generate_arguments(tracked_arity, __MODULE__)
-#     scanned_args = [[]] ++ Enum.scan(args, [], &(&2 ++ [&1]))
-
-#     quote do
-#       unquote do: make_curried_clauses(scanned_args, tracking_name, tracked)
-#     end
-#   end
-
-#   defp make_curried_clauses([args], tracking_name, tracked) do
-#     quote do
-#       def unquote({tracking_name, [], args}) do
-#         unquote(tracked).(unquote_splicing(args))
-#       end
-#     end
-#   end
-
-  # defp make_curried_clauses([args|rest], {fun_name, ctx, _} = fun_attrs) do
-  defp make_curried_clauses([args|rest], tracking_name, tracked) do
-    curried = Macro.generate_arguments(1, __MODULE__)
-    quote do
-      def unquote({tracking_name, [], args}) do
-        # fn(unquote(curried)) -> apply(__MODULE__, unquote(fun_name), unquote(args) ++ [curried]) end
-        fn(unquote(curried)) -> unquote(tracked).(unquote_splicing(args ++ [curried])) end
-      end
-      unquote do: make_curried_clauses(rest, tracking_name, tracked)
-    end
-  end
-  # defp add_overrides_if_not_empty(list, []) do
-  #   list
-  # end
-  # defp add_overrides_if_not_empty([l, _] = list, [overrides: news]) do
-  #   IO.inspect(length(l))
-  #   IO.inspect(news)
-
-  #   overrides =
-  #     Enum.map(
-  #       1..length(l),
-  #       fn(arity) ->
-  #         case news[:"new/#{arity}"] do
-  #           nil -> :noop
-  #           fun -> fun
-  #         end
-  #       end
-  #     )
-
-  #   IO.inspect(overrides)
-
-  #   list ++ [overrides]
-  # end
-
-  # length(types) == length(args) or something is messed up during client-side declaration
-  # `override` is the overriding fun for the `new` constructor with a specific arity (eg., new/2)
-  # defp override_newp({args, types}) do
-  #   override_newp({args, types, :noop})
-  # end
-  # defp override_newp({args, types, override}) do
-
-  # RATIONAlES
-  #
   # `override_newp/1`
   # -----------------
   #
@@ -353,7 +202,6 @@ defmodule Algae.Internal do
   end
 
   defp track_newp({{args, types}, n}) do
-    IO.puts("track_newp's n: #{n}")
     quote do
       def new(unquote_splicing(args)) do
         unquote do: do_typecheck(types, args)
@@ -365,63 +213,17 @@ defmodule Algae.Internal do
   end
 
   defp override_newp({args, types}) do
-    IO.inspect("override_newp's args: ")
-    # IO.inspect({args, types, override})
-    IO.inspect({args, types})
-
-    # new_args =
-    #   case override do
-    #     :noop ->
-    #       args
-    #     fun ->
-    #         fun.(args)
-    #   end
-
-    # IO.inspect("override_newp's new_args: ")
-    # IO.inspect(new_args)
-
     quote do
-
       def newp(unquote_splicing(args)) do
-        # IO.inspect("new/*'s override: ")
-        # IO.inspect(unquote(override))
-        IO.inspect("new/*'s arguments: ")
-        IO.inspect(unquote(args))
-        # IO.inspect("new_args unquoted: ")
-        # IO.inspect(unquote(new_args))
-
-        # new_args =
-        #   case unquote(override) do
-        #     :noop ->
-        #       (fn(unquote_splicing(args)) -> args end).(unquote_splicing(args))
-        #       # (fn(unquote_splicing(args)) ->
-        #       #   raise(UndefinedFunctionError, "constructor redefined")
-        #       # end).(unquote_splicing(args))
-        #     fun ->
-        #       fun.(unquote_splicing(args))
-        #   end
-
-        # IO.inspect("new_args: ")
-        # IO.inspect(new_args)
-
         unquote do: do_typecheck(types, args)
         super(unquote_splicing(args))
       end
     end
   end
 
-  defp do_typecheck(type_functions, functions_args) do
-    IO.puts("do_typecheck's type_functions before quote:")
-    IO.inspect(type_functions)
-    IO.puts("---")
+  defp do_typecheck(types, args) do
     quote do
-      IO.puts("do_typecheck's type_functions after quote:")
-      IO.inspect(unquote(type_functions))
-      IO.puts("---")
-      for {type, arg} <- Enum.zip(unquote(type_functions), unquote(functions_args)) do
-        # can't put Prim.integer, etc., for now because something `module_elements` parser doesn't like it
-        # apply(Algae.Prim, type, [arg])
-        # Algae.Typechecker.check(type, arg)
+      for {type, arg} <- Enum.zip(unquote(types), unquote(args)) do
         case type do
           {:prim, type} ->
             apply(Algae.Prim, type, [arg])

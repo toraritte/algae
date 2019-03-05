@@ -131,7 +131,7 @@ defmodule Person do
     age  :: integer
   end
 
-  def new(name), do: raise(UndefinedFunctionError, "lofa")
+  # def new(name), do: raise(UndefinedFunctionError, "lofa")
 end
 Person.new
 Person.new("lofa")
@@ -208,9 +208,15 @@ defmodule Clock do
     minute :: Clock.Minute
   end
 
-  def new(hour, minute) do
-    h = Clock.Hour.new(hour)
-    m = Clock.Minute.new(minute)
+  def new(minutes) do
+    mins = rem(minutes, 60)
+    hours = div(minutes, 60)
+    new(hours, minutes)
+  end
+
+  def new(hours, minutes) do
+    h = Clock.Hour.new(hours)
+    m = Clock.Minute.new(minutes)
     super(h,m)
   end
 
@@ -324,7 +330,7 @@ defmodule AcuteTriangle do
   def new(alfa, beta) do
     case abs(alfa - beta) < 90.0 do
       false ->
-        super(alfa, beta)
+        # super(alfa, beta)
         raise(ArgumentError, "angles are not acute")
       true ->
         super(alfa, beta)
