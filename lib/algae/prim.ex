@@ -2,6 +2,12 @@ defmodule Algae.Prim do
   def integer(int) when is_integer(int), do: int
   def integer(_), do: raise(ArgumentError, "not integer")
 
+  # 2019-03-06 NOTE `Prim.string/1` == `Prim.binary/1`
+  # ==================================================
+  # For now.  `Ecto.Changeset` has nice  validations for
+  # strings,  probably should  re-use  those, either  by
+  # pulling them in this project, or re-using parts.
+
   def string(str) when is_binary(str), do: str
   def string(_), do: raise(ArgumentError, "not string")
 

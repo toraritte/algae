@@ -39,9 +39,6 @@ defmodule Algae.Internal do
     args_without_defaults =
       Enum.map(args, fn({:\\, [], [stripped, _]}) -> stripped end)
 
-    scanned_args_without_defaults =
-      Enum.scan(args_without_defaults, [], &(&2 ++ [&1]))
-
     arity = length(args_without_defaults)
 
     {fields, types} =
@@ -55,8 +52,16 @@ defmodule Algae.Internal do
             {[field|ts],[{:algae, type}|ts]}
         end
       )
-    scanned_types =
-      Enum.scan(types, [], &(&2 ++ [&1]))
+
+    scanned_types  = do_scan(types)
+    scanned_fields = do_scan(fields)
+    scanned_args_without_defaults = do_scan(args_without_defaults)
+
+    scanned_quoteds =
+      [ scanned_fields,
+        scanned_types,
+        scanned_args_without_defaults,
+      ]
 
     quote do
       use Quark
@@ -70,66 +75,52 @@ defmodule Algae.Internal do
         struct(__MODULE__, unquote(defaults))
       end
 
-      unquote do
-        [[[]] ++ scanned_args_without_defaults, [[]] ++ scanned_types]
-        |> Enum.zip()
-        |> Enum.with_index(-arity)
-        |> Enum.map(&track_newp/1)
-      end
+      # unquote do
+      #   [[[]] ++ scanned_args_without_defaults, [[]] ++ scanned_types]
+      #   |> Enum.zip()
+      #   |> Enum.with_index(-arity)
+      #   |> Enum.map(&track_newp/1)
+      # end
 
-      # 2019-03-06_0958 NOTE
-      # ====================
-      #
-      # Simple   override   is   not  enough   because   the
-      # `override_newp`  unquote block  below will  refer to
-      # `type/1` at  compile time,  and overrides  will only
-      # take effect afterwards.
-      #
-      # For  example,  taking   the  `BinaryId`  example  in
-      # scratch:
-      #
-      #   ```elixir
-      #   # happily complies
-      #   iex(5)> b = BinaryId.new("lofa")
-      #   %BinaryId{binary_id: "lofa"}
-      #
-      #   # `User`'s constructor does call the overridden `type/1`
-      #   iex(6)> User.new(b)
-      #   ** (UndefinedFunctionError) function Ecto.UUID.cast!/1 is undefined (module Ecto.UUID is
-      #   not available)
-      #       Ecto.UUID.cast!("lofa")
-      #       iex:6: anonymous fn/2 in User.new/1
-      #       (elixir) lib/enum.ex:1925: Enum."-reduce/3-lists^foldl/2-0-"/3
-      #       iex:6: User.new/1
-      #         def type(%module{} = data) do
-      #           args =
-      #             Enum.map(
-      #               unquote(fields),
-      #               &Map.get(data,&1)
-      #             )
-      #   ```
+      unquote do: iterate(&track_newp/1, scanned_quoteds, arity)
 
-      def type(%module{} = data) do
-        args =
-          Enum.map(
-            unquote(fields),
-            &Map.get(data,&1)
-          )
+      # def type(%module{} = data) do
+      #   args =
+      #     Enum.map(
+      #       unquote(fields),
+      #       &Map.get(data,&1)
+      #     )
 
-        apply(module, :newp, args)
-      end
+      #   apply(module, :newp, args)
+      # end
 
+      def type(%__MODULE__{} = t), do: t
+      def type(_), do: raise(ArgumentError, "not #{__MODULE__}")
+      # def type(args) when is_list(args), do: IO.puts("called")
+      # def type(args) when is_list(args), do: :noop
 
       defoverridable unquote(newp_override_list) ++ unquote(new_override_list) ++ [type: 1]
 
       # override `new/*` data constructors with typechecked ones
-      unquote do
-        [scanned_args_without_defaults, scanned_types]
-        # |> add_overrides_if_not_empty(opts)
-        |> Enum.zip()
-        |> Enum.map(&override_newp/1)
-      end
+      unquote do: iterate(&override_newp/1, scanned_quoteds, arity)
+        # [scanned_args_without_defaults, scanned_types]
+        # # |> add_overrides_if_not_empty(opts)
+        # |> Enum.zip()
+        # |> Enum.map(&override_newp/1)
+      # end
     end
+  end
+
+  defp do_scan(l) when is_list(l) do
+    Enum.scan(l, [], &(&2 ++ [&1]))
+  end
+
+  defp iterate(fun, scanned_quoteds, arity) when is_list(scanned_quoteds) do
+    scanned_quoteds
+    |> Enum.map(&Kernel.++([[]], &1))
+    |> Enum.zip()
+    |> Enum.with_index(-arity)
+    |> Enum.map(fun)
   end
 
   # RATIONALES
@@ -156,10 +147,10 @@ defmodule Algae.Internal do
   #     > Probably the cleanest (?).
   #
   # `Quark.Partial.defpartialx` works along  the example
-  # below, and it is  marked where `do_typecheck` is
+  # below, and it is  marked where `type_check` is
   # inserted by overriding clauses after creation:
   #
-  #                  do_typecheck
+  #                  type_check
   #                      V
   #   def newp(),        | do: fn(a) -> apply(__MODULE__, :new, [a]      ) end
   #   def newp(a),       | do: fn(b) -> apply(__MODULE__, :new, [a, b]   ) end
@@ -216,7 +207,7 @@ defmodule Algae.Internal do
   #
   #     (`Person.newp.("lofa",27)` not possible yet.)
 
-  defp track_newp({{[], []}, _}) do
+  defp track_newp({{[], [], []}, _}) do
     quote do
       def new() do
         fn(curried) -> apply(__MODULE__, :new, [curried]) end
@@ -224,7 +215,7 @@ defmodule Algae.Internal do
     end
   end
 
-  defp track_newp({{args, types}, 0}) do
+  defp track_newp({{_fields, _types, args}, 0}) do
     quote do
       def new(unquote_splicing(args)) do
         # no need to typecheck because newp/(last_arity) has already does it
@@ -233,10 +224,10 @@ defmodule Algae.Internal do
     end
   end
 
-  defp track_newp({{args, types}, n}) do
+  defp track_newp({{_fields, _types, args}, _n} = t) do
     quote do
       def new(unquote_splicing(args)) do
-        unquote do: do_typecheck(types, args)
+        unquote do: type_check(t)
         fn(curried) ->
           apply(__MODULE__, :newp, unquote(args) ++ [curried])
         end
@@ -244,24 +235,40 @@ defmodule Algae.Internal do
     end
   end
 
-  defp override_newp({args, types}) do
+  defp override_newp({{[], [], []}, _}), do: :noop
+
+  defp override_newp({{_fields, _types, args}, _n} = t) do
     quote do
       def newp(unquote_splicing(args)) do
-        unquote do: do_typecheck(types, args)
+        unquote do: type_check(t)
         super(unquote_splicing(args))
       end
     end
   end
 
-  defp do_typecheck(types, args) do
+  defp type_check({{fields, types, args}, n}) do
+    # IO.puts("type_check - types:")
+    # IO.inspect(types)
+    # IO.puts("type_check - args:")
+    # IO.inspect(args)
     quote do
       for {type, arg} <- Enum.zip(unquote(types), unquote(args)) do
+        # IO.puts("type_check - in for:")
+        # IO.inspect({type, arg})
+
         case type do
           {:prim, type} ->
             apply(Algae.Prim, type, [arg])
           {:algae, module} ->
-            module.type(arg)
+            apply(module, :type, [arg])
+            # module.type(arg)
         end
+      end
+
+      if unquote(n) == 0 do
+        opts = Enum.zip(unquote(fields), unquote(args))
+        apply(__MODULE__, :type, [struct(__MODULE__, opts)])
+        # apply(__MODULE__, :type, [unquote(args)])
       end
     end
   end
