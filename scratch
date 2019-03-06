@@ -120,6 +120,36 @@ defmodule B do
   lofa()
 end
 
+# ------------------------------
+
+defmodule BinaryId do
+  import Algae
+
+  defdatax do
+    binary_id :: binary
+  end
+
+  def new() do
+    Ecto.UUID.generate()
+    |> new()
+  end
+
+  def type(%__MODULE__{binary_id: binary_id}) do
+    Ecto.UUID.cast!(binary_id)
+  end
+end
+
+defmodule User do
+  import Algae
+
+  defdatax do
+    user_id :: BinaryId
+    name    :: string
+  end
+end
+
+# ------------------------------
+
 defmodule Person do
   import Algae
   defdatax do
