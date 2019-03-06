@@ -130,13 +130,16 @@ defmodule BinaryId do
   end
 
   def new() do
-    Ecto.UUID.generate()
-    |> new()
+    # Ecto.UUID.generate()
+    # |> new()
+    new("binary_id")
   end
 
-  def type(%__MODULE__{binary_id: binary_id}) do
-    Ecto.UUID.cast!(binary_id)
+  def type(%__MODULE__{binary_id: "binary_id"}) do
+    # Ecto.UUID.cast!(binary_id)
   end
+
+  def type(_), do: raise(ArgumentError, "not #{__MODULE__}")
 end
 
 defmodule User do
