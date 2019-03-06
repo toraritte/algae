@@ -77,6 +77,38 @@ defmodule Algae.Internal do
         |> Enum.map(&track_newp/1)
       end
 
+      # 2019-03-06_0958 NOTE
+      # ====================
+      #
+      # Simple   override   is   not  enough   because   the
+      # `override_newp`  unquote block  below will  refer to
+      # `type/1` at  compile time,  and overrides  will only
+      # take effect afterwards.
+      #
+      # For  example,  taking   the  `BinaryId`  example  in
+      # scratch:
+      #
+      #   ```elixir
+      #   # happily complies
+      #   iex(5)> b = BinaryId.new("lofa")
+      #   %BinaryId{binary_id: "lofa"}
+      #
+      #   # `User`'s constructor does call the overridden `type/1`
+      #   iex(6)> User.new(b)
+      #   ** (UndefinedFunctionError) function Ecto.UUID.cast!/1 is undefined (module Ecto.UUID is
+      #   not available)
+      #       Ecto.UUID.cast!("lofa")
+      #       iex:6: anonymous fn/2 in User.new/1
+      #       (elixir) lib/enum.ex:1925: Enum."-reduce/3-lists^foldl/2-0-"/3
+      #       iex:6: User.new/1
+      #         def type(%module{} = data) do
+      #           args =
+      #             Enum.map(
+      #               unquote(fields),
+      #               &Map.get(data,&1)
+      #             )
+      #   ```
+
       def type(%module{} = data) do
         args =
           Enum.map(
