@@ -94,7 +94,7 @@ defmodule Algae.Internal do
       #   apply(module, :newp, args)
       # end
 
-      def type(%__MODULE__{} = t), do: t
+      def type(%__MODULE__{}), do: __MODULE__
       def type(_), do: raise(ArgumentError, "not #{__MODULE__}")
       # def type(args) when is_list(args), do: IO.puts("called")
       # def type(args) when is_list(args), do: :noop
@@ -256,6 +256,9 @@ defmodule Algae.Internal do
         # IO.puts("type_check - in for:")
         # IO.inspect({type, arg})
 
+        # 2019-03-07_0912 NOTE
+        # Or could've just checked whether  arg is a struct or
+        # not.
         case type do
           {:prim, type} ->
             apply(Algae.Prim, type, [arg])

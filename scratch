@@ -153,6 +153,29 @@ end
 
 # ------------------------------
 
+defmodule List do
+  import Algae
+  defdatax do
+    list :: list
+  end
+
+  def type(%__MODULE__{list: []} = lst), do: lst
+
+  def type(%__MODULE__{list: [head|tail]} = lst) do
+    case head do
+      %module{} ->
+        Enum.each(tail, &module.type/1)
+      base_type ->
+        # Prim.string/1 and binary/1 are the same so
+        #  this may not be the best approach...
+        type = Algae.Prim.get_type(base_type)
+        Enum.each(tail, &apply(Algae.Prim, type, [&1]))
+    end
+  end
+end
+
+# ------------------------------
+
 defmodule Person do
   import Algae
   defdatax do
