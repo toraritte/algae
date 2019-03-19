@@ -24,6 +24,23 @@ defmodule Algae.Internal do
     end
   end
 
+  def data_astx(lines, %{aliases: _} = caller) when is_list(lines) do
+    {field_values, field_types, specs, args, defaults} = module_elements(lines, caller)
+
+    quote do
+      @type t :: %__MODULE__{unquote_splicing(field_types)}
+      defstruct unquote(field_values)
+
+      @doc "Positional constructor, with args in the same order as they were defined in"
+      @spec new(unquote_splicing(specs)) :: t()
+      def new(unquote_splicing(args)) do
+        struct(__MODULE__, unquote(defaults))
+      end
+
+      defoverridable [new: unquote(Enum.count(args))]
+    end
+  end
+
   def data_ast(modules, {:none, _, _}) do
     full_module = modules |> List.wrap() |> Module.concat()
 

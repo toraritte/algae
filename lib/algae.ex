@@ -213,6 +213,44 @@ defmodule Algae do
     end
   end
 
+  defmacro defdatax(ast) do
+    caller_module = __CALLER__.module
+
+    case ast do
+      # {:none, _, _} = type ->
+      #   embedded_data_ast()
+
+      # {:\\, _, [{:::, _, [module_ctx, type]}, default]} ->
+      #   caller_module
+      #   |> modules(module_ctx)
+      #   |> data_ast(default, type)
+
+      # {:\\, _, [type, default]} ->
+      #   caller_module
+      #   |> List.wrap()
+      #   |> embedded_data_ast(default, type)
+
+      # {:::, _, [module_ctx, {:none, _, _} = type]} ->
+      #   caller_module
+      #   |> modules(module_ctx)
+      #   |> data_ast(type)
+
+      # {:::, _, [module_ctx, type]} ->
+      #   caller_module
+      #   |> modules(module_ctx)
+      #   |> data_ast(default_value(type), type)
+
+      # {_, _, _} = type ->
+      #   data_ast(caller_module, type)
+
+      [do: {:__block__, _, lines}] ->
+        data_astx(lines, __CALLER__)
+
+      # [do: line] ->
+      #   data_ast([line], __CALLER__)
+    end
+  end
+
   @doc """
   Build a sum (coproduct) type from product types
 
