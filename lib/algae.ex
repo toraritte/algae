@@ -244,7 +244,9 @@ defmodule Algae do
       #   data_ast(caller_module, type)
 
       [do: {:__block__, _, lines}] ->
-        data_astx(lines, __CALLER__)
+        # `caller` arg not needed, see comment in
+        # `Internal.normalize_elements_no_defaults/1`
+        data_astx(lines)
 
       # [do: line] ->
       #   data_ast([line], __CALLER__)

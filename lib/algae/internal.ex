@@ -24,21 +24,82 @@ defmodule Algae.Internal do
     end
   end
 
-  def data_astx(lines, %{aliases: _} = caller) when is_list(lines) do
-    {field_values, field_types, specs, args, defaults} = module_elements(lines, caller)
+  def data_astx(lines) when is_list(lines) do
+
+    {fields, algae_types, args, values} = module_elements_no_defaults(lines)
 
     quote do
-      @type t :: %__MODULE__{unquote_splicing(field_types)}
-      defstruct unquote(field_values)
+      # TODO: Field types are no longer Dialyzer types,
+      # but mapping shouldn't be hard.
+      # @type t :: %__MODULE__{unquote_splicing(field_types)}
+      defstruct unquote(fields)
 
-      @doc "Positional constructor, with args in the same order as they were defined in"
-      @spec new(unquote_splicing(specs)) :: t()
+      @doc "Positional constructor, with args in the same order as they were defined in."
+      # TODO: Same as with `defstruct/1` above.
+      # @spec new(unquote_splicing(specs)) :: t()
       def new(unquote_splicing(args)) do
-        struct(__MODULE__, unquote(defaults))
+        struct(__MODULE__, unquote(values))
       end
 
       defoverridable [new: unquote(Enum.count(args))]
     end
+  end
+
+  def module_elements_no_defaults(lines) do
+    List.foldr(lines, {[], [], [], []},
+      fn(line, {field_acc, type_acc, arg_acc, value_acc}) ->
+
+        {field, algae_type} = normalize_elements_no_defaults(line)
+        arg = {field, [], Elixir}
+
+        {
+          [       field | field_acc],
+          [  algae_type | type_acc ],
+          [         arg | arg_acc  ],
+          [{field, arg} | value_acc]
+        }
+      end)
+  end
+
+  @doc """
+  ASTs for different `defdatax/1` line:
+
+      {:::, _,         [{field,    _,          _}, type      ]}, caller)
+
+      minute :: Minute
+      {:::, [line: 6], [{:minute, [line: 6], nil}, {:__aliases__, [line: 6], [:Minute]}]}
+
+      minute :: Clock.Minute
+      {:::, [line: 8], [{:minute, [line: 8], nil}, {:__aliases__, [line: 8], [:Clock, :Minute]}]}
+
+      minute :: :string
+      {:::, [line: 4], [{:minute, [line: 4], nil}, :string]}
+
+      minute :: string
+      {:::, [line: 5], [{:minute, [line: 5], nil}, {:string, [line: 5], nil}]}
+
+  `resolve_alias/2` (and  thus the  `caller` argument)
+  is  not needed,  because the  only clause  that will
+  match is the last one which simply returns its first
+  argument.
+
+  Choosing the  `field :: type` format  for now (i.e.,
+  `minute :: string` above`) because it looks special:
+  it is clearly not an  atom and there is no confusion
+  with Elixir's `String` module.  It would probably be
+  completely unambiguous  to make it  `Prim.type`, but
+  it can become redundant with many fields.
+  """
+  def normalize_elements_no_defaults(
+    {:::, _, [{field, _ctx, nil}, {type, _ctx, nil}]}
+  ) do
+    {field, {:prim, type}}
+  end
+
+  def normalize_elements_no_defaults(
+    {:::, _, [{field, _ctx, nil}, {:__aliases__, _, _} = type]}
+  ) do
+    {field, {:defdatax, type}}
   end
 
   def data_ast(modules, {:none, _, _}) do
